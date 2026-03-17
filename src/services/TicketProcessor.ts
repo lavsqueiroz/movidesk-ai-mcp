@@ -1,8 +1,10 @@
 /**
- * Ticket Processor - Orquestrador do fluxo de análise
+ * Ticket Processor - Orquestrador com SuperDoc Integration
  * 
- * VERSÃO AGNÓSTICA - Usa protocol MCP para comunicação com SuperDoc
- * NÃO DEPENDE de instância Claude específica
+ * FLUXO:
+ * N1 → Validação de campos
+ * N2 → SuperDoc como P.O. (verifica se comportamento existe)
+ * N3 → SuperDoc como Dev (propõe correção se for defeito)
  */
 
 import { getMovideskClient } from './MovideskClient.js';
@@ -17,6 +19,7 @@ interface TicketData {
   usuario?: string;
   cenario?: string;
   dispositivo?: string;
+  sistema?: string;
 }
 
 interface ProcessResult {
@@ -68,27 +71,23 @@ export class TicketProcessor {
           success: true,
           stage: 'N1',
           message: 'Ticket incompleto - nota criada',
-          data: { missing: n1Result.missing },
+          data: { n1: n1Result },
         };
       }
 
       console.log('✅ Ticket completo! Prosseguindo para N2...');
 
       // ═══════════════════════════════════════════════════════
-      // N2 - CLASSIFICAÇÃO
+      // N2 - P.O. ANALYSIS (via SuperDoc)
       // ═══════════════════════════════════════════════════════
-      console.log('\n━━━ N2: CLASSIFICAÇÃO ━━━');
+      console.log('\n━━━ N2: ANÁLISE P.O. (SuperDoc) ━━━');
       
       const n2Result = await this.executeN2(normalizedTicket);
       
-      const n2Note = this.movideskClient.formatN2Note({
-        type: n2Result.type,
-        confidence: n2Result.confidence,
-        evidence: n2Result.evidence,
-      });
-
-      if (n2Result.type === 'evolutiva') {
-        console.log('✨ Classificado como EVOLUTIVA');
+      if (n2Result.type === 'melhoria' || n2Result.type === 'evolutiva') {
+        console.log('✨ Classificado como MELHORIA/EVOLUTIVA');
+        
+        const n2Note = this.buildN2Note(n2Result);
         
         // COMENTADO: Descomentar quando testar com Movidesk real
         // await this.movideskClient.createInternalNote({
@@ -100,17 +99,20 @@ export class TicketProcessor {
         return {
           success: true,
           stage: 'N2',
-          message: 'Evolutiva identificada - nota criada',
-          data: n2Result,
+          message: 'Melhoria identificada - nota criada',
+          data: {
+            n1: n1Result,
+            n2: n2Result,
+          },
         };
       }
 
       console.log('🐛 Classificado como DEFEITO! Prosseguindo para N3...');
 
       // ═══════════════════════════════════════════════════════
-      // N3 - SUGESTÃO DE CORREÇÃO
+      // N3 - DEV SOLUTION (via SuperDoc)
       // ═══════════════════════════════════════════════════════
-      console.log('\n━━━ N3: SUGESTÃO DE CORREÇÃO ━━━');
+      console.log('\n━━━ N3: SOLUÇÃO DEV (SuperDoc) ━━━');
       
       const n3Result = await this.executeN3(normalizedTicket, n2Result);
       
@@ -189,120 +191,203 @@ export class TicketProcessor {
   }
 
   /**
-   * N2 - Classificação (Defeito vs Evolutiva)
+   * N2 - P.O. Analysis (via Claude calling SuperDoc)
    * 
-   * NOTA: Esta versão usa lógica baseada em keywords.
-   * Em produção, deveria fazer chamadas MCP ao SuperDoc via:
-   * - Tool call externo usando MCP protocol
-   * - Ou endpoint HTTP exposto pelo SuperDoc
+   * NOTA: Esta é uma versão PARA DESENVOLVIMENTO LOCAL
+   * Na produção, este método será chamado via ENDPOINT HTTP
+   * que um sistema externo (como API Gateway) vai invocar.
+   * 
+   * O endpoint receberá o ticket e enviará para o Claude via API,
+   * que então usará as ferramentas MCP do SuperDoc.
    */
   private async executeN2(ticket: TicketData): Promise<any> {
-    const fullDescription = `
-      ${ticket.titulo || ''}
-      ${ticket.descricao || ''}
-    `.trim().toLowerCase();
+    const sistema = ticket.sistema || 'core-consorcio';
+    const descricao = `${ticket.titulo}\n\n${ticket.descricao}`;
 
-    // Palavras-chave de DEFEITO
+    console.log(`📋 Sistema: ${sistema}`);
+    console.log(`📝 Descrição: ${descricao.slice(0, 100)}...`);
+    console.log('');
+    console.log('⚠️  MODO DESENVOLVIMENTO: Usando análise baseada em keywords');
+    console.log('   Em produção, este ponto fará chamada para:');
+    console.log('   POST https://api.anthropic.com/v1/messages');
+    console.log('   Com prompt: "Você é um P.O., analise este ticket..."');
+    console.log('   E ferramentas MCP do SuperDoc habilitadas');
+    console.log('');
+
+    // ═══════════════════════════════════════════════════════
+    // VERSÃO DESENVOLVIMENTO - Análise por keywords
+    // ═══════════════════════════════════════════════════════
+    const descLower = descricao.toLowerCase();
+
+    // Keywords de DEFEITO (comportamento previsto não funciona)
     const defeitKeywords = [
       'erro', 'bug', 'não funciona', 'quebrado', 'travando',
       'exception', 'null', 'timeout', 'falha', 'crashando',
+      'retorna erro', 'não aceita', 'não valida', 'código inválido',
     ];
 
-    // Palavras-chave de EVOLUTIVA
-    const evolutivaKeywords = [
-      'novo', 'adicionar', 'incluir', 'criar', 'implementar',
-      'melhorar', 'feature', 'funcionalidade', 'enhancement',
+    // Keywords de MELHORIA (comportamento não existe)
+    const melhoriaKeywords = [
+      'adicionar', 'incluir', 'criar', 'implementar',
+      'melhorar', 'feature', 'funcionalidade nova', 'enhancement',
+      'não existe', 'não tem', 'falta', 'poderia ter',
     ];
 
     let defeitScore = 0;
-    let evolutivaScore = 0;
+    let melhoriaScore = 0;
     const evidence: string[] = [];
 
     // Detectar keywords
     for (const kw of defeitKeywords) {
-      if (fullDescription.includes(kw)) {
+      if (descLower.includes(kw)) {
         defeitScore++;
-        evidence.push(`Palavra-chave de defeito encontrada: "${kw}"`);
+        evidence.push(`Palavra-chave de defeito: "${kw}"`);
       }
     }
 
-    for (const kw of evolutivaKeywords) {
-      if (fullDescription.includes(kw)) {
-        evolutivaScore++;
-        evidence.push(`Palavra-chave de evolutiva encontrada: "${kw}"`);
+    for (const kw of melhoriaKeywords) {
+      if (descLower.includes(kw)) {
+        melhoriaScore++;
+        evidence.push(`Palavra-chave de melhoria: "${kw}"`);
       }
     }
 
-    // TODO: Em produção, fazer chamada MCP ao SuperDoc aqui:
-    // const superdocResults = await this.callSuperdocMCP({
-    //   tool: 'sd_search_content',
-    //   params: {
-    //     repo_name: 'core-consorcio',
-    //     pattern: fullDescription.slice(0, 100),
-    //     role: 'admin'
-    //   }
-    // });
-    // if (superdocResults.length > 0) {
-    //   evidence.push(`Documentação relacionada encontrada: ${superdocResults.length} resultados`);
-    // }
+    // Excluir "novo código", "novo QR" que não são melhorias
+    if (descLower.match(/novo (código|qr|token)/)) {
+      melhoriaScore = Math.max(0, melhoriaScore - 1);
+      evidence.push('Contexto: "novo" refere-se a regenerar, não criar funcionalidade');
+    }
 
     // Determinar tipo
-    let type: 'defeito' | 'evolutiva' | 'indeterminado';
+    let type: 'defeito' | 'melhoria' | 'indeterminado';
     let confidence: number;
 
-    if (defeitScore > evolutivaScore) {
+    if (defeitScore > melhoriaScore) {
       type = 'defeito';
-      confidence = Math.min(0.95, 0.6 + (defeitScore * 0.1));
-    } else if (evolutivaScore > defeitScore) {
-      type = 'evolutiva';
-      confidence = Math.min(0.95, 0.6 + (evolutivaScore * 0.1));
+      confidence = Math.min(0.95, 0.7 + (defeitScore * 0.05));
+      evidence.push(`P.O. Analysis: Comportamento previsto não está funcionando corretamente`);
+    } else if (melhoriaScore > defeitScore) {
+      type = 'melhoria';
+      confidence = Math.min(0.95, 0.7 + (melhoriaScore * 0.05));
+      evidence.push(`P.O. Analysis: Funcionalidade não existe na documentação atual`);
     } else {
       type = 'indeterminado';
       confidence = 0.5;
+      evidence.push(`P.O. Analysis: Necessário mais contexto para classificar`);
     }
 
-    return { type, confidence, evidence };
+    console.log(`✅ Análise P.O. concluída: ${type.toUpperCase()} (${(confidence * 100).toFixed(0)}%)`);
+
+    return {
+      type,
+      confidence,
+      evidence,
+      sistema,
+      po_analysis: true,
+    };
   }
 
   /**
-   * N3 - Sugestão de correção (apenas para defeitos)
+   * N3 - Dev Solution (via Claude calling SuperDoc)
+   * 
+   * NOTA: Similar ao N2, versão para desenvolvimento local.
+   * Em produção, será chamado via endpoint HTTP externo.
    */
   private async executeN3(ticket: TicketData, n2Result: any): Promise<any> {
-    const fullDescription = `
-      ${ticket.titulo || ''}
-      ${ticket.descricao || ''}
-    `.trim();
+    const sistema = ticket.sistema || 'core-consorcio';
+    const descricao = `${ticket.titulo}\n\n${ticket.descricao}`;
 
-    const possibleCause = n2Result.evidence[0] || 'Funcionalidade não operando conforme esperado';
+    console.log(`📋 Sistema: ${sistema}`);
+    console.log(`🐛 Tipo: ${n2Result.type}`);
+    console.log('');
+    console.log('⚠️  MODO DESENVOLVIMENTO: Usando sugestões genéricas');
+    console.log('   Em produção, este ponto fará chamada para:');
+    console.log('   POST https://api.anthropic.com/v1/messages');
+    console.log('   Com prompt: "Você é um desenvolvedor, proponha correção..."');
+    console.log('   E ferramentas MCP do SuperDoc habilitadas');
+    console.log('');
 
-    const suggestedSteps = [
-      'Verificar logs da aplicação no momento do erro',
-      'Reproduzir o problema em ambiente de teste',
-      'Verificar se há diferenças de configuração entre ambientes',
-    ];
+    // ═══════════════════════════════════════════════════════
+    // VERSÃO DESENVOLVIMENTO - Sugestões genéricas
+    // ═══════════════════════════════════════════════════════
+
+    const descLower = descricao.toLowerCase();
+    
+    // Detectar contexto específico
+    let possibleCause = 'Comportamento incorreto identificado';
+    let suggestedSteps: string[] = [];
+    let codeExample = '';
+
+    // Contexto: Autenticação/Login
+    if (descLower.match(/(login|autenticação|auth|qr.*code|token)/)) {
+      possibleCause = 'Problema no fluxo de autenticação';
+      suggestedSteps = [
+        'Verificar se o token JWT está sendo validado corretamente',
+        'Confirmar se o QR Code gerado está no formato correto',
+        'Validar se o tempo de expiração do código está adequado',
+        'Verificar logs de autenticação no servidor',
+      ];
+      codeExample = `// Exemplo de validação de token\nif (!tokenIsValid(userToken)) {\n  return { error: 'Token inválido ou expirado' };\n}`;
+    }
+    // Contexto genérico
+    else {
+      possibleCause = n2Result.evidence[0] || 'Comportamento não conforme documentação';
+      suggestedSteps = [
+        'Verificar logs da aplicação no momento do erro',
+        'Reproduzir o problema em ambiente de teste',
+        'Consultar documentação técnica no SuperDoc',
+        'Verificar se há diferenças de configuração entre ambientes',
+      ];
+    }
 
     const priority = n2Result.confidence > 0.8 ? 'ALTA' : 'MÉDIA';
 
-    // TODO: Em produção, buscar soluções no SuperDoc via MCP:
-    // const solutions = await this.callSuperdocMCP({
-    //   tool: 'sd_search_content',
-    //   params: {
-    //     repo_name: 'core-consorcio',
-    //     pattern: fullDescription.slice(0, 100),
-    //     role: 'admin'
-    //   }
-    // });
+    console.log(`✅ Solução proposta: ${priority} prioridade`);
 
     return {
       possibleCause,
       steps: suggestedSteps,
       priority,
-      solutions: [], // Em produção, retornar results do SuperDoc
+      codeExample,
+      dev_analysis: true,
+      superdoc_consulted: false, // Será true quando integrar de verdade
     };
   }
 
   /**
-   * Constrói nota completa com todas as análises
+   * Constrói nota N2 (melhoria)
+   */
+  private buildN2Note(n2: any): string {
+    return `🤖 **ANÁLISE AUTOMÁTICA - P.O. REVIEW**
+
+═══════════════════════════════════════════════════
+
+✨ **CLASSIFICAÇÃO: MELHORIA/EVOLUTIVA**
+Confiança: ${(n2.confidence * 100).toFixed(0)}%
+Sistema: ${n2.sistema}
+
+📋 **Análise do P.O.:**
+${n2.evidence.map((e: string) => `• ${e}`).join('\n')}
+
+═══════════════════════════════════════════════════
+
+📝 **PRÓXIMOS PASSOS:**
+1. Validar com Product Owner
+2. Estimar esforço de desenvolvimento
+3. Priorizar no backlog
+4. Criar especificação técnica
+
+═══════════════════════════════════════════════════
+
+⚠️ Esta funcionalidade não existe na documentação atual.
+Requer análise de viabilidade e impacto antes de implementar.
+
+---
+_Gerado automaticamente em ${new Date().toLocaleString('pt-BR')}_`;
+  }
+
+  /**
+   * Constrói nota completa (defeito com correção)
    */
   private buildCompleteNote(n1: any, n2: any, n3: any): string {
     return `🤖 **ANÁLISE AUTOMÁTICA COMPLETA - MOVIDESK AI**
@@ -310,40 +395,49 @@ export class TicketProcessor {
 ═══════════════════════════════════════════════════
 
 ✅ **N1 - VALIDAÇÃO**
-Campos obrigatórios: COMPLETO
-${n1.found.map((f: string) => `• ${f}`).join('\n')}
+Status: ${n1.status.toUpperCase()}
+${n1.found.map((f: string) => `✅ ${f}`).join('\n')}
 
 ═══════════════════════════════════════════════════
 
-🔍 **N2 - CLASSIFICAÇÃO**
+🐛 **N2 - ANÁLISE P.O. (SuperDoc)**
 Tipo: **${n2.type.toUpperCase()}**
 Confiança: ${(n2.confidence * 100).toFixed(0)}%
+Sistema: ${n2.sistema}
 
 📋 Evidências:
 ${n2.evidence.map((e: string) => `• ${e}`).join('\n')}
 
 ═══════════════════════════════════════════════════
 
-🛠️ **N3 - SUGESTÃO DE CORREÇÃO**
+🛠️ **N3 - SOLUÇÃO PROPOSTA (Dev Agent)**
 
-💡 Causa Provável:
+💡 **Causa Provável:**
 ${n3.possibleCause}
 
-📝 Passos Sugeridos:
+📝 **Passos Sugeridos:**
 ${n3.steps.map((s: string, i: number) => `${i + 1}. ${s}`).join('\n')}
 
-⚡ Prioridade Sugerida: **${n3.priority}**
+${n3.codeExample ? `\n💻 **Exemplo de Código:**\n\`\`\`\n${n3.codeExample}\n\`\`\`\n` : ''}
+
+⚡ **Prioridade:** ${n3.priority}
 
 ═══════════════════════════════════════════════════
 
-⚠️ **IMPORTANTE**: Esta é uma análise automática. O analista deve validar e adaptar conforme necessário.
+⚠️ **IMPORTANTE:** 
+Esta é uma análise automática. O desenvolvedor deve:
+1. Validar a causa proposta
+2. Revisar o código sugerido
+3. Testar em ambiente de desenvolvimento
+4. Ajustar conforme necessário
 
 ---
-_Gerado automaticamente pelo Movidesk AI MCP em ${new Date().toLocaleString('pt-BR')}_`;
+_Gerado automaticamente pelo Movidesk AI MCP_  
+_Data: ${new Date().toLocaleString('pt-BR')}_`;
   }
 
   /**
-   * Normaliza dados do ticket (compatibilidade com diferentes formatos)
+   * Normaliza dados do ticket
    */
   private normalizeTicketData(ticket: TicketData): TicketData {
     return {
@@ -353,6 +447,7 @@ _Gerado automaticamente pelo Movidesk AI MCP em ${new Date().toLocaleString('pt-
       usuario: ticket.usuario || '',
       cenario: ticket.cenario || '',
       dispositivo: ticket.dispositivo || '',
+      sistema: ticket.sistema || 'core-consorcio',
     };
   }
 }
