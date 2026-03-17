@@ -1,0 +1,21 @@
+{
+  "id": "12345",
+  "protocol": "TICKET-2026-001",
+  "subject": "Sistema travando ao fazer login",
+  "description": "Quando tento fazer login no sistema, aparece erro 500 e a tela fica travada. Isso acontece desde ontem à tarde.",
+  "category": "Suporte Técnico",
+  "urgency": "Alta",
+  "status": "Novo",
+  "createdDate": "2026-03-17T18:30:00Z",
+  "client": {
+    "name": "João Silva",
+    "email": "joao.silva@empresa.com",
+    "company": "Empresa XPTO"
+  },
+  "customFields": {
+    "usuario": "joao.silva",
+    "cenario": "Login no sistema web",
+    "dispositivo": "Chrome, Windows 10",
+    "versao_sistema": "2.5.1"
+  }
+}
