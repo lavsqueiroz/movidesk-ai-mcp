@@ -1,0 +1,45 @@
+{
+  "name": "movidesk-ai-mcp",
+  "version": "1.0.0",
+  "description": "MCP Server para análise inteligente de tickets do Movidesk integrado com SuperDoc",
+  "main": "src/mcp-server/server-http-entry.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/mcp-server/server-http-entry.ts",
+    "dev:watch": "tsx watch src/mcp-server/server-http-entry.ts",
+    "start": "tsx src/mcp-server/server-http-entry.ts",
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "rebuild": "npm run clean && npm run build",
+    "typecheck": "tsc --noEmit",
+    "docker:build": "docker build -t movidesk-ai-mcp:latest .",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f",
+    "docker:restart": "docker-compose restart"
+  },
+  "keywords": [
+    "mcp",
+    "movidesk",
+    "superdoc",
+    "automation",
+    "ai"
+  ],
+  "author": "Lavínia Queiroz",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "axios": "^1.7.0",
+    "dotenv": "^16.4.0",
+    "express": "^5.0.0",
+    "tsx": "^4.19.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

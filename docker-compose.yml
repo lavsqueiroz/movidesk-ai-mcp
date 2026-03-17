@@ -1,0 +1,36 @@
+# ═══════════════════════════════════════════════════════════════
+# MOVIDESK AI MCP - DOCKER COMPOSE
+# ═══════════════════════════════════════════════════════════════
+
+version: '3.8'
+
+services:
+  movidesk-ai-mcp:
+    build: .
+    container_name: movidesk-ai-mcp
+    ports:
+      - "9002:9002"
+    environment:
+      - MCP_HTTP_PORT=9002
+      - MCP_HTTP_HOST=0.0.0.0
+      - MOVIDESK_TOKEN=${MOVIDESK_TOKEN}
+      - MOVIDESK_URL=${MOVIDESK_URL}
+      - SUPERDOC_URL=${SUPERDOC_URL}
+      - AUTH_ENABLED=${AUTH_ENABLED:-false}
+      - CORS_ENABLED=${CORS_ENABLED:-true}
+      - NODE_ENV=${NODE_ENV:-development}
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - movidesk-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9002/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+networks:
+  movidesk-network:
+    driver: bridge
