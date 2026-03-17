@@ -1,0 +1,21 @@
+{
+  "id": "99999",
+  "protocol": "TICKET-2026-099",
+  "subject": "Erro ao fazer login com QR Code - Código não é aceito",
+  "description": "O usuário está tentando fazer login usando o código gerado pelo aplicativo autenticador após ler o QR Code, mas o sistema retorna 'Código de autenticação inválido'. O QR Code foi recebido por e-mail há 2 dias. O usuário já tentou gerar um novo código várias vezes mas o erro persiste.",
+  "category": "Suporte Técnico - Core",
+  "urgency": "Alta",
+  "status": "Novo",
+  "createdDate": "2026-03-17T20:30:00Z",
+  "client": {
+    "name": "Maria Santos",
+    "email": "maria.santos@empresa.com",
+    "company": "Empresa XPTO Ltda"
+  },
+  "customFields": {
+    "usuario": "maria.santos",
+    "cenario": "Login no sistema Core via QR Code",
+    "dispositivo": "Google Authenticator, iPhone 13",
+    "versao_sistema": "Core API 3.2.1"
+  }
+}
