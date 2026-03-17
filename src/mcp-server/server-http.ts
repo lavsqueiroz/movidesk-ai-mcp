@@ -3,6 +3,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import express, { Express, Request, Response, NextFunction } from 'express';
+import { getTicketProcessor } from '../services/TicketProcessor.js';
 
 interface MCPServerConfig {
   port: number;
@@ -24,6 +25,7 @@ export class MCPHTTPServer {
   private config: MCPServerConfig;
   private server: any | null = null;
   private tools: Map<string, ToolDefinition> = new Map();
+  private ticketProcessor = getTicketProcessor();
 
   constructor(config: MCPServerConfig) {
     this.config = config;
@@ -103,13 +105,30 @@ export class MCPHTTPServer {
       res.json({ tools: toolsList });
     });
 
-    // Webhook do Movidesk (será implementado depois)
+    // Webhook do Movidesk - PROCESSAMENTO COMPLETO
     this.app.post('/webhook/ticket-created', async (req: Request, res: Response) => {
-      console.log('📨 Webhook recebido do Movidesk:', req.body);
-      
-      // TODO: Processar ticket aqui
-      
-      res.json({ status: 'received', message: 'Webhook recebido com sucesso' });
+      try {
+        console.log('\n📨 Webhook recebido do Movidesk');
+        
+        const ticketData = req.body;
+        
+        // Processar ticket com o orquestrador
+        const result = await this.ticketProcessor.processTicket(ticketData);
+        
+        res.json({
+          status: result.success ? 'processed' : 'error',
+          stage: result.stage,
+          message: result.message,
+          data: result.data,
+        });
+        
+      } catch (error: any) {
+        console.error('❌ Erro ao processar webhook:', error);
+        res.status(500).json({
+          status: 'error',
+          message: error.message,
+        });
+      }
     });
 
     // 404
