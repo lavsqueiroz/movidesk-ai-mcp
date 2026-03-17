@@ -1,10 +1,10 @@
 /**
  * Ticket Processor - Orquestrador do fluxo de análise
  * 
- * Executa automaticamente: N1 → N2 → N3 → Nota Interna
+ * VERSÃO AGNÓSTICA - Usa protocol MCP para comunicação com SuperDoc
+ * NÃO DEPENDE de instância Claude específica
  */
 
-import { getSuperDocClient } from './SuperDocClient.js';
 import { getMovideskClient } from './MovideskClient.js';
 
 interface TicketData {
@@ -28,7 +28,6 @@ interface ProcessResult {
 }
 
 export class TicketProcessor {
-  private superDocClient = getSuperDocClient();
   private movideskClient = getMovideskClient();
 
   /**
@@ -58,11 +57,12 @@ export class TicketProcessor {
         
         const note = this.movideskClient.formatN1Note(n1Result.missing);
         
-        await this.movideskClient.createInternalNote({
-          ticketId,
-          description: note,
-          isInternal: true,
-        });
+        // COMENTADO: Descomentar quando testar com Movidesk real
+        // await this.movideskClient.createInternalNote({
+        //   ticketId,
+        //   description: note,
+        //   isInternal: true,
+        // });
         
         return {
           success: true,
@@ -90,11 +90,12 @@ export class TicketProcessor {
       if (n2Result.type === 'evolutiva') {
         console.log('✨ Classificado como EVOLUTIVA');
         
-        await this.movideskClient.createInternalNote({
-          ticketId,
-          description: n2Note,
-          isInternal: true,
-        });
+        // COMENTADO: Descomentar quando testar com Movidesk real
+        // await this.movideskClient.createInternalNote({
+        //   ticketId,
+        //   description: n2Note,
+        //   isInternal: true,
+        // });
         
         return {
           success: true,
@@ -120,11 +121,12 @@ export class TicketProcessor {
       
       const fullNote = this.buildCompleteNote(n1Result, n2Result, n3Result);
       
-      await this.movideskClient.createInternalNote({
-        ticketId,
-        description: fullNote,
-        isInternal: true,
-      });
+      // COMENTADO: Descomentar quando testar com Movidesk real
+      // await this.movideskClient.createInternalNote({
+      //   ticketId,
+      //   description: fullNote,
+      //   isInternal: true,
+      // });
 
       console.log('\n╔══════════════════════════════════════════════════╗');
       console.log('║  ✅ PROCESSAMENTO COMPLETO!                     ║');
@@ -188,20 +190,78 @@ export class TicketProcessor {
 
   /**
    * N2 - Classificação (Defeito vs Evolutiva)
+   * 
+   * NOTA: Esta versão usa lógica baseada em keywords.
+   * Em produção, deveria fazer chamadas MCP ao SuperDoc via:
+   * - Tool call externo usando MCP protocol
+   * - Ou endpoint HTTP exposto pelo SuperDoc
    */
   private async executeN2(ticket: TicketData): Promise<any> {
     const fullDescription = `
       ${ticket.titulo || ''}
       ${ticket.descricao || ''}
-    `.trim();
+    `.trim().toLowerCase();
 
-    const classification = await this.superDocClient.classifyIssueType(fullDescription);
+    // Palavras-chave de DEFEITO
+    const defeitKeywords = [
+      'erro', 'bug', 'não funciona', 'quebrado', 'travando',
+      'exception', 'null', 'timeout', 'falha', 'crashando',
+    ];
 
-    return {
-      type: classification.type,
-      confidence: classification.confidence,
-      evidence: classification.evidence,
-    };
+    // Palavras-chave de EVOLUTIVA
+    const evolutivaKeywords = [
+      'novo', 'adicionar', 'incluir', 'criar', 'implementar',
+      'melhorar', 'feature', 'funcionalidade', 'enhancement',
+    ];
+
+    let defeitScore = 0;
+    let evolutivaScore = 0;
+    const evidence: string[] = [];
+
+    // Detectar keywords
+    for (const kw of defeitKeywords) {
+      if (fullDescription.includes(kw)) {
+        defeitScore++;
+        evidence.push(`Palavra-chave de defeito encontrada: "${kw}"`);
+      }
+    }
+
+    for (const kw of evolutivaKeywords) {
+      if (fullDescription.includes(kw)) {
+        evolutivaScore++;
+        evidence.push(`Palavra-chave de evolutiva encontrada: "${kw}"`);
+      }
+    }
+
+    // TODO: Em produção, fazer chamada MCP ao SuperDoc aqui:
+    // const superdocResults = await this.callSuperdocMCP({
+    //   tool: 'sd_search_content',
+    //   params: {
+    //     repo_name: 'core-consorcio',
+    //     pattern: fullDescription.slice(0, 100),
+    //     role: 'admin'
+    //   }
+    // });
+    // if (superdocResults.length > 0) {
+    //   evidence.push(`Documentação relacionada encontrada: ${superdocResults.length} resultados`);
+    // }
+
+    // Determinar tipo
+    let type: 'defeito' | 'evolutiva' | 'indeterminado';
+    let confidence: number;
+
+    if (defeitScore > evolutivaScore) {
+      type = 'defeito';
+      confidence = Math.min(0.95, 0.6 + (defeitScore * 0.1));
+    } else if (evolutivaScore > defeitScore) {
+      type = 'evolutiva';
+      confidence = Math.min(0.95, 0.6 + (evolutivaScore * 0.1));
+    } else {
+      type = 'indeterminado';
+      confidence = 0.5;
+    }
+
+    return { type, confidence, evidence };
   }
 
   /**
@@ -213,24 +273,31 @@ export class TicketProcessor {
       ${ticket.descricao || ''}
     `.trim();
 
-    const solutions = await this.superDocClient.findSolutions(fullDescription);
-
     const possibleCause = n2Result.evidence[0] || 'Funcionalidade não operando conforme esperado';
 
     const suggestedSteps = [
       'Verificar logs da aplicação no momento do erro',
       'Reproduzir o problema em ambiente de teste',
       'Verificar se há diferenças de configuração entre ambientes',
-      ...(solutions.length > 0 ? ['Consultar documentação encontrada pelo SuperDoc'] : []),
     ];
 
     const priority = n2Result.confidence > 0.8 ? 'ALTA' : 'MÉDIA';
+
+    // TODO: Em produção, buscar soluções no SuperDoc via MCP:
+    // const solutions = await this.callSuperdocMCP({
+    //   tool: 'sd_search_content',
+    //   params: {
+    //     repo_name: 'core-consorcio',
+    //     pattern: fullDescription.slice(0, 100),
+    //     role: 'admin'
+    //   }
+    // });
 
     return {
       possibleCause,
       steps: suggestedSteps,
       priority,
-      solutions,
+      solutions: [], // Em produção, retornar results do SuperDoc
     };
   }
 
@@ -266,8 +333,6 @@ ${n3.possibleCause}
 ${n3.steps.map((s: string, i: number) => `${i + 1}. ${s}`).join('\n')}
 
 ⚡ Prioridade Sugerida: **${n3.priority}**
-
-${n3.solutions.length > 0 ? `\n📚 Documentação Relacionada:\n${n3.solutions.slice(0, 3).map((s: string) => `• ${s.slice(0, 100)}...`).join('\n')}` : ''}
 
 ═══════════════════════════════════════════════════
 
