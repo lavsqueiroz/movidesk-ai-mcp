@@ -6,7 +6,7 @@
   "main": "dist/mcp-server/server-http-entry.js",
   "scripts": {
     "dev": "tsx watch src/mcp-server/server-http-entry.ts",
-    "build": "npm rebuild better-sqlite3 && tsc",
+    "build": "rm -rf dist && npm rebuild better-sqlite3 && tsc",
     "start": "node dist/mcp-server/server-http-entry.js",
     "typecheck": "tsc --noEmit"
   },
