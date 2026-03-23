@@ -4,7 +4,7 @@
  * Este script testa a criação de nota automática no Movidesk
  */
 
-const RENDER_URL = process.argv[2] || 'https://sua-url.onrender.com';
+const RENDER_URL = process.argv[2] || 'https://movidesk-ai-mcp.onrender.com';
 const TICKET_ID = '14703';
 
 // Nota de teste com análise N1
