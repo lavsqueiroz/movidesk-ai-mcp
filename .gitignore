@@ -1,15 +1,11 @@
-# Dependências
+# Dependencies
 node_modules/
-package-lock.json
-yarn.lock
-pnpm-lock.yaml
 
 # Build
 dist/
-build/
 *.tsbuildinfo
 
-# Variáveis de ambiente (NUNCA commitar!)
+# Environment
 .env
 .env.local
 .env.*.local
@@ -18,23 +14,25 @@ build/
 logs/
 *.log
 npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Docker
-.dockerignore
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
 
-# Testes
-coverage/
-.nyc_output/
+# Database
+data/*.db
+data/*.db-shm
+data/*.db-wal
+
+# Temp
+*.tmp
+*.bak
+
+# Arquivos removidos (limpeza)
+src/services/ClaudeClient.ts

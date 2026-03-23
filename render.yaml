@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: movidesk-ai-mcp
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MCP_HTTP_PORT
+        value: 9002
+      - key: MCP_HTTP_HOST
+        value: 0.0.0.0
+      - key: MOVIDESK_TOKEN
+        sync: false
+      - key: MOVIDESK_URL
+        value: https://newm.movidesk.com
+      - key: SUPERDOC_URL
+        value: http://21.0.0.122:9001
+    healthCheckPath: /health
