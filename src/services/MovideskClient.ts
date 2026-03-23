@@ -1,8 +1,5 @@
 /**
  * Movidesk API Client
- * 
- * Cliente para integração com API do Movidesk
- * Permite criar notas internas e listar tickets
  */
 
 import axios, { AxiosInstance } from 'axios';
@@ -14,6 +11,7 @@ interface MovideskTicket {
   category?: string;
   urgency?: string;
   status?: string;
+  justificativa?: string;
   createdDate?: string;
   owner?: any;
   clients?: any[];
@@ -31,14 +29,17 @@ interface ListTicketsParams {
   status?: string;
 }
 
+interface ListByJustificativaParams {
+  limit?: number;
+  justificativas: string[];
+}
+
 export class MovideskClient {
   private httpClient: AxiosInstance;
   private token: string;
-  private baseUrl: string;
 
   constructor() {
     this.token = process.env.MOVIDESK_TOKEN || '';
-    this.baseUrl = process.env.MOVIDESK_URL || 'https://newm.movidesk.com';
 
     if (!this.token) {
       throw new Error('MOVIDESK_TOKEN não configurado no .env');
@@ -47,9 +48,7 @@ export class MovideskClient {
     this.httpClient = axios.create({
       baseURL: 'https://api.movidesk.com/public/v1',
       timeout: 30000,
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
     });
   }
 
@@ -59,13 +58,9 @@ export class MovideskClient {
   async getStatusConfigs(): Promise<any[]> {
     try {
       console.error('🔍 Buscando configurações de status...');
-
       const response = await this.httpClient.get('/ticketStatus', {
-        params: {
-          token: this.token,
-        },
+        params: { token: this.token },
       });
-
       const statuses = Array.isArray(response.data) ? response.data : [response.data];
       console.error(`✅ ${statuses.length} status retornados`);
       return statuses;
@@ -80,14 +75,12 @@ export class MovideskClient {
   }
 
   /**
-   * Lista tickets do Movidesk
-   * IMPORTANTE: $select é OBRIGATÓRIO na API do Movidesk!
+   * Lista tickets por status
    */
   async listTickets(params: ListTicketsParams = {}): Promise<MovideskTicket[]> {
     try {
       const { limit = 10, status } = params;
-
-      console.error(`📋 Buscando ${limit} tickets do Movidesk...`);
+      console.error(`📋 Buscando tickets - status: ${status}...`);
 
       const response = await this.httpClient.get('/tickets', {
         params: {
@@ -100,14 +93,41 @@ export class MovideskClient {
 
       const tickets = Array.isArray(response.data) ? response.data : [response.data];
       console.error(`✅ ${tickets.length} tickets retornados`);
-
       return tickets;
     } catch (error: any) {
       console.error('❌ Erro ao listar tickets:', error.message);
-      if (error.response) {
-        console.error('   Status:', error.response.status);
-        console.error('   Data:', error.response.data);
-      }
+      throw error;
+    }
+  }
+
+  /**
+   * Lista tickets Aguardando filtrados por justificativas do N1
+   */
+  async listTicketsByJustificativas(params: ListByJustificativaParams): Promise<MovideskTicket[]> {
+    try {
+      const { limit = 10, justificativas } = params;
+      console.error(`📋 Buscando tickets Aguardando com justificativas N1...`);
+
+      // Busca todos os Aguardando e filtra por justificativa localmente
+      // pois a API do Movidesk pode não suportar filtro por campo customizado diretamente
+      const response = await this.httpClient.get('/tickets', {
+        params: {
+          token: this.token,
+          $select: 'id,protocol,subject,status,justificativa,createdDate',
+          $top: 100,
+          $filter: `status eq 'Aguardando'`,
+        },
+      });
+
+      const todos = Array.isArray(response.data) ? response.data : [response.data];
+      const filtrados = todos
+        .filter((t: any) => justificativas.includes(t.justificativa || ''))
+        .slice(0, limit);
+
+      console.error(`✅ ${filtrados.length} tickets Aguardando N1 encontrados`);
+      return filtrados;
+    } catch (error: any) {
+      console.error('❌ Erro ao listar tickets por justificativa:', error.message);
       throw error;
     }
   }
@@ -118,12 +138,8 @@ export class MovideskClient {
   async getTicket(ticketId: string): Promise<MovideskTicket | null> {
     try {
       const response = await this.httpClient.get('/tickets', {
-        params: {
-          token: this.token,
-          id: ticketId,
-        },
+        params: { token: this.token, id: ticketId },
       });
-
       return response.data;
     } catch (error: any) {
       console.error(`❌ Erro ao buscar ticket ${ticketId}:`, error.message);
@@ -132,7 +148,7 @@ export class MovideskClient {
   }
 
   /**
-   * Cria nota interna no ticket
+   * Cria nota INTERNA no ticket
    */
   async createInternalNote(params: CreateNoteParams): Promise<boolean> {
     try {
@@ -140,23 +156,18 @@ export class MovideskClient {
 
       const action = {
         id: 0,
-        type: 2,
+        type: 2, // 2 = Nota interna
         description: params.description,
-        isInternal: params.isInternal,
+        isInternal: true, // SEMPRE interna
       };
 
       await this.httpClient.patch(
         `/tickets`,
-        {
-          id: params.ticketId,
-          actions: [action],
-        },
-        {
-          params: { token: this.token, id: params.ticketId },
-        }
+        { id: params.ticketId, actions: [action] },
+        { params: { token: this.token, id: params.ticketId } }
       );
 
-      console.error(`✅ Nota criada com sucesso no ticket ${params.ticketId}`);
+      console.error(`✅ Nota interna criada com sucesso no ticket ${params.ticketId}`);
       return true;
     } catch (error: any) {
       console.error('❌ Erro ao criar nota:', error.message);
@@ -167,31 +178,8 @@ export class MovideskClient {
       return false;
     }
   }
-
-  formatN1Note(missingFields: string[]): string {
-    return `🤖 **ANÁLISE AUTOMÁTICA - N1 (Validação)**\n\n❌ **TICKET INCOMPLETO**\n\nFaltam as seguintes informações obrigatórias:\n${missingFields.map(f => `• ${f}`).join('\n')}\n\n⚠️ **AÇÃO NECESSÁRIA**:\nPor favor, solicite ao solicitante que forneça as informações acima antes de prosseguir com a análise.\n\n---\n_Esta é uma nota automática gerada pelo sistema de análise de tickets._`;
-  }
-
-  formatN2Note(classification: {
-    type: 'defeito' | 'evolutiva' | 'indeterminado';
-    confidence: number;
-    evidence: string[];
-  }): string {
-    const emoji = classification.type === 'defeito' ? '🐛' : '✨';
-    const typeLabel = classification.type === 'defeito' ? 'DEFEITO' : 'EVOLUTIVA';
-    return `🤖 **ANÁLISE AUTOMÁTICA - N2 (Classificação)**\n\n${emoji} **Classificado como: ${typeLabel}**\nConfiança: ${(classification.confidence * 100).toFixed(0)}%\n\n📋 **Evidências:**\n${classification.evidence.map(e => `• ${e}`).join('\n')}\n\n---\n_Esta é uma nota automática gerada pelo sistema de análise de tickets._`;
-  }
-
-  formatN3Note(suggestion: {
-    possibleCause: string;
-    steps: string[];
-    priority: string;
-  }): string {
-    return `🤖 **ANÁLISE AUTOMÁTICA - N3 (Sugestão de Correção)**\n\n🔍 **Causa Provável:**\n${suggestion.possibleCause}\n\n🛠️ **Passos Sugeridos:**\n${suggestion.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}\n\n⚡ **Prioridade Sugerida:** ${suggestion.priority}\n\n---\n_Esta é uma nota automática gerada pelo sistema de análise de tickets._`;
-  }
 }
 
-// Singleton instance
 let instance: MovideskClient | null = null;
 
 export function getMovideskClient(): MovideskClient {
