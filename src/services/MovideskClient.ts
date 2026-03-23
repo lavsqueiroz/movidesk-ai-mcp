@@ -44,7 +44,6 @@ export class MovideskClient {
       throw new Error('MOVIDESK_TOKEN não configurado no .env');
     }
 
-    // URL correta: https://api.movidesk.com/public/v1
     this.httpClient = axios.create({
       baseURL: 'https://api.movidesk.com/public/v1',
       timeout: 30000,
@@ -52,6 +51,32 @@ export class MovideskClient {
         'Content-Type': 'application/json',
       },
     });
+  }
+
+  /**
+   * Busca configurações de status do Movidesk
+   */
+  async getStatusConfigs(): Promise<any[]> {
+    try {
+      console.error('🔍 Buscando configurações de status...');
+
+      const response = await this.httpClient.get('/ticketStatus', {
+        params: {
+          token: this.token,
+        },
+      });
+
+      const statuses = Array.isArray(response.data) ? response.data : [response.data];
+      console.error(`✅ ${statuses.length} status retornados`);
+      return statuses;
+    } catch (error: any) {
+      console.error('❌ Erro ao buscar status:', error.message);
+      if (error.response) {
+        console.error('   Status HTTP:', error.response.status);
+        console.error('   Data:', error.response.data);
+      }
+      throw error;
+    }
   }
 
   /**
@@ -64,7 +89,6 @@ export class MovideskClient {
 
       console.error(`📋 Buscando ${limit} tickets do Movidesk...`);
 
-      // $select é OBRIGATÓRIO
       const response = await this.httpClient.get('/tickets', {
         params: {
           token: this.token,
@@ -109,21 +133,18 @@ export class MovideskClient {
 
   /**
    * Cria nota interna no ticket
-   * IMPORTANTE: Usa PATCH no ticket, não POST em /actions
    */
   async createInternalNote(params: CreateNoteParams): Promise<boolean> {
     try {
       console.error(`📝 Criando nota interna no ticket ${params.ticketId}`);
 
-      // Estrutura da action (nota)
       const action = {
-        id: 0, // 0 = criar nova action
-        type: 2, // 2 = Nota
+        id: 0,
+        type: 2,
         description: params.description,
         isInternal: params.isInternal,
       };
 
-      // PATCH no ticket adicionando a action
       await this.httpClient.patch(
         `/tickets`,
         {
@@ -147,16 +168,10 @@ export class MovideskClient {
     }
   }
 
-  /**
-   * Formata nota de análise N1 (campos faltando)
-   */
   formatN1Note(missingFields: string[]): string {
     return `🤖 **ANÁLISE AUTOMÁTICA - N1 (Validação)**\n\n❌ **TICKET INCOMPLETO**\n\nFaltam as seguintes informações obrigatórias:\n${missingFields.map(f => `• ${f}`).join('\n')}\n\n⚠️ **AÇÃO NECESSÁRIA**:\nPor favor, solicite ao solicitante que forneça as informações acima antes de prosseguir com a análise.\n\n---\n_Esta é uma nota automática gerada pelo sistema de análise de tickets._`;
   }
 
-  /**
-   * Formata nota de análise N2 (classificação)
-   */
   formatN2Note(classification: {
     type: 'defeito' | 'evolutiva' | 'indeterminado';
     confidence: number;
@@ -164,19 +179,15 @@ export class MovideskClient {
   }): string {
     const emoji = classification.type === 'defeito' ? '🐛' : '✨';
     const typeLabel = classification.type === 'defeito' ? 'DEFEITO' : 'EVOLUTIVA';
-    
-    return `🤖 **ANÁLISE AUTOMÁTICA - N2 (Classificação)**\n\n${emoji} **Classificado como: ${typeLabel}**\nConfiança: ${(classification.confidence * 100).toFixed(0)}%\n\n📋 **Evidências:**\n${classification.evidence.map(e => `• ${e}`).join('\n')}\n\n${classification.type === 'evolutiva' ? `\n⚠️ **PRÓXIMO PASSO**:\nComo se trata de uma evolutiva, é necessário:\n1. Validar com Product Owner\n2. Estimar esforço\n3. Criar item no backlog\n` : `\n🔧 **PRÓXIMO PASSO**:\nComo se trata de um defeito, prosseguir para análise N3 (sugestão de correção).\n`}\n\n---\n_Esta é uma nota automática gerada pelo sistema de análise de tickets._`;
+    return `🤖 **ANÁLISE AUTOMÁTICA - N2 (Classificação)**\n\n${emoji} **Classificado como: ${typeLabel}**\nConfiança: ${(classification.confidence * 100).toFixed(0)}%\n\n📋 **Evidências:**\n${classification.evidence.map(e => `• ${e}`).join('\n')}\n\n---\n_Esta é uma nota automática gerada pelo sistema de análise de tickets._`;
   }
 
-  /**
-   * Formata nota de análise N3 (sugestão de correção)
-   */
   formatN3Note(suggestion: {
     possibleCause: string;
     steps: string[];
     priority: string;
   }): string {
-    return `🤖 **ANÁLISE AUTOMÁTICA - N3 (Sugestão de Correção)**\n\n🔍 **Causa Provável:**\n${suggestion.possibleCause}\n\n🛠️ **Passos Sugeridos:**\n${suggestion.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}\n\n⚡ **Prioridade Sugerida:** ${suggestion.priority}\n\n⚠️ **IMPORTANTE**:\nEsta é uma sugestão automática. O analista deve validar e adaptar conforme necessário.\n\n---\n_Esta é uma nota automática gerada pelo sistema de análise de tickets._`;
+    return `🤖 **ANÁLISE AUTOMÁTICA - N3 (Sugestão de Correção)**\n\n🔍 **Causa Provável:**\n${suggestion.possibleCause}\n\n🛠️ **Passos Sugeridos:**\n${suggestion.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}\n\n⚡ **Prioridade Sugerida:** ${suggestion.priority}\n\n---\n_Esta é uma nota automática gerada pelo sistema de análise de tickets._`;
   }
 }
 

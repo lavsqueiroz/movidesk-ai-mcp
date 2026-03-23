@@ -54,6 +54,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       {
+        name: 'get_status_configs',
+        description: 'Busca todos os status de tickets configurados no Movidesk, incluindo se exigem justificativa ou não.',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+        },
+      },
+      {
         name: 'list_new_tickets',
         description: 'Lista tickets novos/aguardando análise do Movidesk. Retorna ID, assunto, status e data de criação.',
         inputSchema: {
@@ -112,6 +120,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     switch (name) {
+
+      case 'get_status_configs': {
+        const statuses = await movideskClient.getStatusConfigs();
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(statuses, null, 2),
+            },
+          ],
+        };
+      }
+
       case 'list_new_tickets': {
         const limit = Math.min((args as any).limit || 10, 50);
         
@@ -164,39 +185,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           content: [
             {
               type: 'text',
-              text: `# TICKET ${ticketId} - Análise N1
-
-## 📋 Informações do Ticket
-
-- **ID**: ${ticket.id}
-- **Assunto**: ${ticket.subject}
-- **Status**: ${ticket.status}
-- **Criado em**: ${ticket.createdDate}
-
-## 📝 Descrição
-
-${descricao}
-
----
-
-## 🤖 Instruções para Análise
-
-Agora você deve:
-
-1. **Ler o prompt N1** abaixo
-2. **Analisar o ticket** seguindo as instruções do prompt
-3. **Gerar DOIS outputs**:
-   - 📋 Orientação completa para o analista N1
-   - 💬 Resposta pronta para copiar e colar para o cliente
-4. **MOSTRAR** o resultado completo ao usuário
-5. **PERGUNTAR**: "Posso criar esta nota no ticket ${ticketId}? (sim/não)"
-6. **AGUARDAR** resposta do usuário
-7. **SE aprovado**: Chamar create_note_approved com o conteúdo
-
----
-
-${promptN1}
-`,
+              text: `# TICKET ${ticketId} - Análise N1\n\n## 📋 Informações do Ticket\n\n- **ID**: ${ticket.id}\n- **Assunto**: ${ticket.subject}\n- **Status**: ${ticket.status}\n- **Criado em**: ${ticket.createdDate}\n\n## 📝 Descrição\n\n${descricao}\n\n---\n\n## 🤖 Instruções para Análise\n\nAgora você deve:\n\n1. **Ler o prompt N1** abaixo\n2. **Analisar o ticket** seguindo as instruções do prompt\n3. **Gerar DOIS outputs**:\n   - 📋 Orientação completa para o analista N1\n   - 💬 Resposta pronta para copiar e colar para o cliente\n4. **MOSTRAR** o resultado completo ao usuário\n5. **PERGUNTAR**: "Posso criar esta nota no ticket ${ticketId}? (sim/não)"\n6. **AGUARDAR** resposta do usuário\n7. **SE aprovado**: Chamar create_note_approved com o conteúdo\n\n---\n\n${promptN1}\n`,
             },
           ],
         };
