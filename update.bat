@@ -4,7 +4,7 @@ echo  Movidesk MCP - Atualizador
 echo ========================================
 echo.
 
-set INSTALL_DIR=%~dp0
+set INSTALL_DIR=C:\Users\Administrador\movidesk-ai-mcp-main\movidesk-ai-mcp-main
 set ZIP_URL=https://github.com/lavsqueiroz/movidesk-ai-mcp/archive/refs/heads/main.zip
 set ZIP_FILE=%TEMP%\movidesk-mcp-update.zip
 set EXTRACT_DIR=%TEMP%\movidesk-mcp-update
@@ -29,10 +29,10 @@ if errorlevel 1 (
 )
 
 echo [3/5] Copiando arquivos atualizados...
-xcopy /s /y "%EXTRACT_DIR%\movidesk-ai-mcp-main\src" "%INSTALL_DIR%src\"
-xcopy /s /y "%EXTRACT_DIR%\movidesk-ai-mcp-main\prompts" "%INSTALL_DIR%prompts\"
-copy /y "%EXTRACT_DIR%\movidesk-ai-mcp-main\package.json" "%INSTALL_DIR%package.json"
-copy /y "%EXTRACT_DIR%\movidesk-ai-mcp-main\tsconfig.json" "%INSTALL_DIR%tsconfig.json"
+xcopy /s /y "%EXTRACT_DIR%\movidesk-ai-mcp-main\src" "%INSTALL_DIR%\src\"
+xcopy /s /y "%EXTRACT_DIR%\movidesk-ai-mcp-main\prompts" "%INSTALL_DIR%\prompts\"
+copy /y "%EXTRACT_DIR%\movidesk-ai-mcp-main\package.json" "%INSTALL_DIR%\package.json"
+copy /y "%EXTRACT_DIR%\movidesk-ai-mcp-main\tsconfig.json" "%INSTALL_DIR%\tsconfig.json"
 
 echo [4/5] Fazendo build...
 cd /d "%INSTALL_DIR%"
