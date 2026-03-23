@@ -17,10 +17,11 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [2/5] Extraindo arquivos...
+echo [2/5] Extraindo arquivos via PowerShell...
 if exist "%EXTRACT_DIR%" rmdir /s /q "%EXTRACT_DIR%"
 mkdir "%EXTRACT_DIR%"
-tar -xf "%ZIP_FILE%" -C "%EXTRACT_DIR%"
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $zip = [System.IO.Compression.ZipFile]::OpenRead('%ZIP_FILE%'); foreach ($entry in $zip.Entries) { $dest = Join-Path '%EXTRACT_DIR%' $entry.FullName; $destDir = Split-Path $dest; if (!(Test-Path $destDir)) { New-Item -ItemType Directory -Force -Path $destDir | Out-Null }; if ($entry.Name -ne '') { try { [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $dest, $true) } catch { Write-Host 'Ignorando arquivo invalido:' $entry.FullName } } }; $zip.Dispose() } catch { Write-Host 'Erro:' $_.Exception.Message; exit 1 }"
 if errorlevel 1 (
     echo ERRO: Falha ao extrair o ZIP.
     pause
