@@ -4,6 +4,7 @@
 
 import express, { Express, Request, Response, NextFunction } from 'express';
 import { getQueueManager } from '../services/QueueManager.js';
+import { getMovideskClient } from '../services/MovideskClient.js';
 
 interface MCPServerConfig {
   port: number;
@@ -26,6 +27,7 @@ export class MCPHTTPServer {
   private server: any | null = null;
   private tools: Map<string, ToolDefinition> = new Map();
   private queueManager = getQueueManager();
+  private movideskClient = getMovideskClient();
 
   constructor(config: MCPServerConfig) {
     this.config = config;
@@ -97,15 +99,63 @@ export class MCPHTTPServer {
       });
     });
 
-    // Lista de tools
-    this.app.get('/tools', (req: Request, res: Response) => {
-      const toolsList = Array.from(this.tools.values()).map(t => ({
-        name: t.name,
-        description: t.description,
-        inputSchema: t.inputSchema,
-      }));
-      
-      res.json({ tools: toolsList });
+    // ═══════════════════════════════════════════════════════
+    // MOVIDESK - Listar Tickets
+    // ═══════════════════════════════════════════════════════
+    this.app.get('/movidesk/tickets', async (req: Request, res: Response) => {
+      try {
+        console.log('\n📋 Buscando tickets do Movidesk...');
+        
+        const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
+        
+        // Buscar tickets via API Movidesk
+        const tickets = await this.movideskClient.listTickets({ limit });
+        
+        console.log(`✅ ${tickets.length} tickets retornados`);
+        
+        res.json({
+          status: 'success',
+          count: tickets.length,
+          tickets: tickets.map(t => ({
+            id: t.id,
+            protocol: t.protocol,
+            subject: t.subject,
+            status: t.status,
+            createdDate: t.createdDate,
+          })),
+        });
+        
+      } catch (error: any) {
+        console.error('❌ Erro ao buscar tickets:', error);
+        res.status(500).json({
+          status: 'error',
+          message: error.message,
+        });
+      }
+    });
+
+    // ═══════════════════════════════════════════════════════
+    // MOVIDESK - Buscar 1 Ticket Específico
+    // ═══════════════════════════════════════════════════════
+    this.app.get('/movidesk/tickets/:id', async (req: Request, res: Response) => {
+      try {
+        const ticketId = req.params.id;
+        console.log(`\n📋 Buscando ticket ${ticketId}...`);
+        
+        const ticket = await this.movideskClient.getTicket(ticketId);
+        
+        res.json({
+          status: 'success',
+          ticket,
+        });
+        
+      } catch (error: any) {
+        console.error('❌ Erro ao buscar ticket:', error);
+        res.status(500).json({
+          status: 'error',
+          message: error.message,
+        });
+      }
     });
 
     // Webhook do Movidesk - ADICIONA NA FILA
@@ -116,7 +166,7 @@ export class MCPHTTPServer {
         const ticketData = req.body;
         const ticketId = ticketData.ticket_id || ticketData.id;
         
-        // Adicionar na fila ao invés de processar
+        // Adicionar na fila
         const queueId = this.queueManager.addToQueue(ticketData);
         
         console.log(`✅ Ticket ${ticketId} adicionado à fila (fila ID: ${queueId})`);
@@ -137,7 +187,7 @@ export class MCPHTTPServer {
       }
     });
 
-    // Estat\u00edsticas da fila
+    // Estatísticas da fila
     this.app.get('/queue/stats', (req: Request, res: Response) => {
       try {
         const stats = this.queueManager.getQueueStats();
@@ -201,20 +251,19 @@ export class MCPHTTPServer {
         
         console.log('');
         console.log('═══════════════════════════════════════════════════════════');
-        console.log(`  🚀 MOVIDESK AI MCP SERVER - COM SISTEMA DE FILA`);
+        console.log(`  🚀 MOVIDESK AI MCP SERVER`);
         console.log('═══════════════════════════════════════════════════════════');
         console.log('');
         console.log(`  📍 Endereço: http://${this.config.host}:${this.config.port}`);
-        console.log(`  🛠️  Tools: ${this.tools.size} registradas`);
         console.log(`  📦 Fila: ${stats.pending} pendentes, ${stats.completed} processados`);
         console.log('');
-        console.log('  🔓 Rotas PÚBLICAS:');
-        console.log('     GET  /health              - Health check + fila status');
-        console.log('     GET  /info                - Server info');
-        console.log('     GET  /tools               - Lista de tools');
-        console.log('     POST /webhook/ticket-created - Webhook Movidesk (→ fila)');
-        console.log('     GET  /queue/stats         - Estatísticas da fila');
-        console.log('     GET  /queue/pending       - Tickets pendentes');
+        console.log('  🔓 ROTAS:');
+        console.log('     GET  /health                    - Health check');
+        console.log('     GET  /movidesk/tickets          - Listar tickets');
+        console.log('     GET  /movidesk/tickets/:id      - Buscar 1 ticket');
+        console.log('     POST /webhook/ticket-created    - Webhook (→ fila)');
+        console.log('     GET  /queue/stats               - Estatísticas fila');
+        console.log('     GET  /queue/pending             - Tickets pendentes');
         console.log('');
         console.log('═══════════════════════════════════════════════════════════');
         console.log('');
