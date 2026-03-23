@@ -1,14 +1,19 @@
 #!/usr/bin/env node
 /**
- * MCP Queue Server - Servidor MCP para processar fila de tickets
+ * MCP Queue Server - FLUXO COM APROVAÇÃO HUMANA OBRIGATÓRIA
  * 
- * FLUXO COM APROVAÇÃO HUMANA:
- * 1. Listar tickets novos/pendentes
- * 2. Analisar ticket com N1 (MOSTRAR resultado)
- * 3. AGUARDAR APROVAÇÃO HUMANA
- * 4. Criar nota SOMENTE após confirmação
+ * REGRAS CRÍTICAS:
+ * 1. NUNCA criar notas sem aprovação explícita do usuário
+ * 2. SEMPRE mostrar análise completa ANTES de pedir aprovação
+ * 3. AGUARDAR confirmação ("sim", "pode", "aprovo") antes de executar create_note_approved
  * 
- * NUNCA criar notas sem aprovação explícita!
+ * FLUXO CORRETO:
+ * Usuário: "Processar tickets novos"
+ * → list_new_tickets (mostra lista)
+ * → analyze_ticket_n1 (mostra análise completa)
+ * → PERGUNTAR: "Posso criar esta nota?"
+ * → AGUARDAR resposta
+ * → SE aprovado: create_note_approved
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -32,7 +37,7 @@ const movideskClient = getMovideskClient();
 const server = new Server(
   {
     name: 'movidesk-queue',
-    version: '1.0.0',
+    version: '2.0.0',
   },
   {
     capabilities: {
@@ -50,26 +55,27 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: 'list_new_tickets',
-        description: 'Lista tickets novos/recém-criados do Movidesk que precisam de análise. Use para ver quais tickets estão aguardando processamento.',
+        description: 'Lista tickets novos/aguardando análise do Movidesk. Retorna ID, assunto, status e data de criação.',
         inputSchema: {
           type: 'object',
           properties: {
             limit: {
               type: 'number',
-              description: 'Número máximo de tickets para retornar (padrão: 10)',
+              description: 'Número máximo de tickets para retornar (padrão: 10, máximo: 50)',
+              default: 10,
             },
           },
         },
       },
       {
         name: 'analyze_ticket_n1',
-        description: 'Analisa UM ticket específico usando o agente N1. IMPORTANTE: Esta ferramenta APENAS analisa e mostra o resultado. NÃO cria nota automaticamente. Após ver o resultado, você deve PERGUNTAR ao usuário se pode criar a nota.',
+        description: 'Analisa UM ticket usando o agente N1. RETORNA: contexto do ticket + prompt N1 carregado. Você deve então gerar a análise completa (orientação para analista + resposta para cliente) e MOSTRAR ao usuário. NÃO cria nota - apenas analisa.',
         inputSchema: {
           type: 'object',
           properties: {
             ticket_id: {
               type: 'string',
-              description: 'ID do ticket a ser analisado',
+              description: 'ID do ticket do Movidesk',
             },
           },
           required: ['ticket_id'],
@@ -77,17 +83,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'create_note_approved',
-        description: 'Cria nota interna no ticket do Movidesk. ATENÇÃO: Use esta ferramenta SOMENTE depois que o usuário APROVAR explicitamente com "sim", "pode", "ok" ou similar. NUNCA crie notas sem aprovação humana.',
+        description: 'Cria nota interna no ticket. CRÍTICO: Use SOMENTE após: (1) chamar analyze_ticket_n1, (2) gerar análise completa, (3) MOSTRAR ao usuário, (4) RECEBER aprovação explícita ("sim", "pode", "aprovo", "ok"). NUNCA use sem aprovação prévia.',
         inputSchema: {
           type: 'object',
           properties: {
             ticket_id: {
               type: 'string',
-              description: 'ID do ticket onde criar a nota',
+              description: 'ID do ticket',
             },
             note_content: {
               type: 'string',
-              description: 'Conteúdo completo da nota a ser criada',
+              description: 'Conteúdo completo da nota (deve incluir orientação para analista E resposta para cliente)',
             },
           },
           required: ['ticket_id', 'note_content'],
@@ -106,45 +112,32 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     switch (name) {
-      // ───────────────────────────────────────────────────────
-      // LIST_NEW_TICKETS
-      // ───────────────────────────────────────────────────────
       case 'list_new_tickets': {
-        const limit = (args as any).limit || 10;
+        const limit = Math.min((args as any).limit || 10, 50);
         
-        // Buscar tickets do Movidesk (novos/aguardando)
         const tickets = await movideskClient.listTickets({ 
           limit,
-          status: 'Aguardando', // ou 'Novo' - ajustar conforme necessário
+          status: 'Aguardando',
         });
-        
-        const ticketsList = tickets.map(t => ({
-          id: t.id,
-          subject: t.subject,
-          status: t.status,
-          createdDate: t.createdDate,
-        }));
         
         return {
           content: [
             {
               type: 'text',
               text: JSON.stringify({
-                status: 'success',
-                count: ticketsList.length,
-                tickets: ticketsList,
-                message: ticketsList.length > 0 
-                  ? `Encontrados ${ticketsList.length} tickets aguardando análise`
-                  : 'Nenhum ticket novo encontrado',
+                count: tickets.length,
+                tickets: tickets.map(t => ({
+                  id: t.id,
+                  subject: t.subject,
+                  status: t.status,
+                  createdDate: t.createdDate,
+                })),
               }, null, 2),
             },
           ],
         };
       }
 
-      // ───────────────────────────────────────────────────────
-      // ANALYZE_TICKET_N1
-      // ───────────────────────────────────────────────────────
       case 'analyze_ticket_n1': {
         const ticketId = (args as any).ticket_id;
         
@@ -152,7 +145,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           throw new Error('ticket_id é obrigatório');
         }
         
-        // Buscar ticket completo
         const ticket = await movideskClient.getTicket(ticketId);
         
         if (!ticket) {
@@ -163,40 +155,46 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const promptPath = path.join(__dirname, '../../prompts/N1_SUPPORT_AGENT.md');
         const promptN1 = fs.readFileSync(promptPath, 'utf-8');
         
-        // Preparar contexto do ticket
-        const ticketContext = `
-TICKET ID: ${ticket.id}
-ASSUNTO: ${ticket.subject}
-STATUS: ${ticket.status}
-CRIADO EM: ${ticket.createdDate}
-
-DESCRIÇÃO:
-${ticket.actions && ticket.actions.length > 0 ? ticket.actions[0].description : 'Sem descrição'}
-        `.trim();
+        // Extrair descrição (primeira action)
+        const descricao = ticket.actions && ticket.actions.length > 0 
+          ? ticket.actions[0].description 
+          : 'Sem descrição disponível';
         
         return {
           content: [
             {
               type: 'text',
-              text: `# ANÁLISE N1 - Ticket ${ticketId}
+              text: `# TICKET ${ticketId} - Análise N1
 
-${ticketContext}
+## 📋 Informações do Ticket
+
+- **ID**: ${ticket.id}
+- **Assunto**: ${ticket.subject}
+- **Status**: ${ticket.status}
+- **Criado em**: ${ticket.createdDate}
+
+## 📝 Descrição
+
+${descricao}
 
 ---
 
-**PROMPT N1 CARREGADO**
+## 🤖 Instruções para Análise
 
 Agora você deve:
-1. Analisar este ticket usando as instruções do prompt N1
-2. Gerar a orientação para o analista E a resposta para o cliente
-3. MOSTRAR o resultado completo para o usuário
-4. PERGUNTAR: "Posso criar esta nota no ticket ${ticketId}? (sim/não)"
 
-**AGUARDE APROVAÇÃO ANTES DE CRIAR A NOTA!**
+1. **Ler o prompt N1** abaixo
+2. **Analisar o ticket** seguindo as instruções do prompt
+3. **Gerar DOIS outputs**:
+   - 📋 Orientação completa para o analista N1
+   - 💬 Resposta pronta para copiar e colar para o cliente
+4. **MOSTRAR** o resultado completo ao usuário
+5. **PERGUNTAR**: "Posso criar esta nota no ticket ${ticketId}? (sim/não)"
+6. **AGUARDAR** resposta do usuário
+7. **SE aprovado**: Chamar create_note_approved com o conteúdo
 
 ---
 
-**Prompt N1:**
 ${promptN1}
 `,
             },
@@ -204,9 +202,6 @@ ${promptN1}
         };
       }
 
-      // ───────────────────────────────────────────────────────
-      // CREATE_NOTE_APPROVED
-      // ───────────────────────────────────────────────────────
       case 'create_note_approved': {
         const ticketId = (args as any).ticket_id;
         const noteContent = (args as any).note_content;
@@ -215,7 +210,6 @@ ${promptN1}
           throw new Error('ticket_id e note_content são obrigatórios');
         }
         
-        // Criar nota no Movidesk
         const success = await movideskClient.createInternalNote({
           ticketId,
           description: noteContent,
@@ -230,7 +224,6 @@ ${promptN1}
                 text: JSON.stringify({
                   status: 'success',
                   message: `✅ Nota criada com sucesso no ticket ${ticketId}`,
-                  ticket_id: ticketId,
                   ticket_url: `https://newm.movidesk.com/Ticket/Edit/${ticketId}`,
                 }, null, 2),
               },
@@ -260,17 +253,11 @@ ${promptN1}
   }
 });
 
-// ═══════════════════════════════════════════════════════════
-// INICIAR SERVIDOR
-// ═══════════════════════════════════════════════════════════
-
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   
-  console.error('✅ Movidesk Queue MCP Server iniciado!');
-  console.error('📋 Ferramentas com aprovação humana configuradas');
-  console.error('⚠️  NUNCA cria notas sem aprovação explícita!');
+  console.error('✅ Movidesk MCP v2.0 - Aprovação Humana Obrigatória');
 }
 
 main().catch((error) => {
