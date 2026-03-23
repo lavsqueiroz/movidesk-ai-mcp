@@ -109,26 +109,29 @@ export class MovideskClient {
 
   /**
    * Cria nota interna no ticket
+   * IMPORTANTE: Usa PATCH no ticket, não POST em /actions
    */
   async createInternalNote(params: CreateNoteParams): Promise<boolean> {
     try {
       console.log(`📝 Criando nota interna no ticket ${params.ticketId}`);
 
-      const noteData = {
-        type: 1, // Tipo: Nota
+      // Estrutura da action (nota)
+      const action = {
+        id: 0, // 0 = criar nova action
+        type: 2, // 2 = Nota
         description: params.description,
         isInternal: params.isInternal,
-        createdBy: {
-          id: 'AI_ASSISTANT',
-          businessName: 'Assistente AI',
-        },
       };
 
-      await this.httpClient.post(
-        `/tickets/${params.ticketId}/actions`,
-        noteData,
+      // PATCH no ticket adicionando a action
+      await this.httpClient.patch(
+        `/tickets`,
         {
-          params: { token: this.token },
+          id: params.ticketId,
+          actions: [action],
+        },
+        {
+          params: { token: this.token, id: params.ticketId },
         }
       );
 
@@ -136,6 +139,10 @@ export class MovideskClient {
       return true;
     } catch (error: any) {
       console.error('❌ Erro ao criar nota:', error.message);
+      if (error.response) {
+        console.error('   Status:', error.response.status);
+        console.error('   Data:', JSON.stringify(error.response.data));
+      }
       return false;
     }
   }
