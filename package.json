@@ -6,7 +6,7 @@
   "main": "dist/mcp-server/server-http-entry.js",
   "scripts": {
     "dev": "tsx watch src/mcp-server/server-http-entry.ts",
-    "build": "tsc",
+    "build": "npm rebuild better-sqlite3 && tsc",
     "start": "node dist/mcp-server/server-http-entry.js",
     "typecheck": "tsc --noEmit"
   },
@@ -23,5 +23,8 @@
     "@types/better-sqlite3": "^7.6.0",
     "typescript": "^5.3.3",
     "tsx": "^4.7.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
