@@ -62,7 +62,7 @@ export class MovideskClient {
     try {
       const { limit = 10, status } = params;
 
-      console.log(`📋 Buscando ${limit} tickets do Movidesk...`);
+      console.error(`📋 Buscando ${limit} tickets do Movidesk...`);
 
       // $select é OBRIGATÓRIO
       const response = await this.httpClient.get('/tickets', {
@@ -75,7 +75,7 @@ export class MovideskClient {
       });
 
       const tickets = Array.isArray(response.data) ? response.data : [response.data];
-      console.log(`✅ ${tickets.length} tickets retornados`);
+      console.error(`✅ ${tickets.length} tickets retornados`);
 
       return tickets;
     } catch (error: any) {
@@ -113,7 +113,7 @@ export class MovideskClient {
    */
   async createInternalNote(params: CreateNoteParams): Promise<boolean> {
     try {
-      console.log(`📝 Criando nota interna no ticket ${params.ticketId}`);
+      console.error(`📝 Criando nota interna no ticket ${params.ticketId}`);
 
       // Estrutura da action (nota)
       const action = {
@@ -135,7 +135,7 @@ export class MovideskClient {
         }
       );
 
-      console.log(`✅ Nota criada com sucesso no ticket ${params.ticketId}`);
+      console.error(`✅ Nota criada com sucesso no ticket ${params.ticketId}`);
       return true;
     } catch (error: any) {
       console.error('❌ Erro ao criar nota:', error.message);
@@ -151,18 +151,7 @@ export class MovideskClient {
    * Formata nota de análise N1 (campos faltando)
    */
   formatN1Note(missingFields: string[]): string {
-    return `🤖 **ANÁLISE AUTOMÁTICA - N1 (Validação)**
-
-❌ **TICKET INCOMPLETO**
-
-Faltam as seguintes informações obrigatórias:
-${missingFields.map(f => `• ${f}`).join('\n')}
-
-⚠️ **AÇÃO NECESSÁRIA**:
-Por favor, solicite ao solicitante que forneça as informações acima antes de prosseguir com a análise.
-
----
-_Esta é uma nota automática gerada pelo sistema de análise de tickets._`;
+    return `🤖 **ANÁLISE AUTOMÁTICA - N1 (Validação)**\n\n❌ **TICKET INCOMPLETO**\n\nFaltam as seguintes informações obrigatórias:\n${missingFields.map(f => `• ${f}`).join('\n')}\n\n⚠️ **AÇÃO NECESSÁRIA**:\nPor favor, solicite ao solicitante que forneça as informações acima antes de prosseguir com a análise.\n\n---\n_Esta é uma nota automática gerada pelo sistema de análise de tickets._`;
   }
 
   /**
@@ -176,27 +165,7 @@ _Esta é uma nota automática gerada pelo sistema de análise de tickets._`;
     const emoji = classification.type === 'defeito' ? '🐛' : '✨';
     const typeLabel = classification.type === 'defeito' ? 'DEFEITO' : 'EVOLUTIVA';
     
-    return `🤖 **ANÁLISE AUTOMÁTICA - N2 (Classificação)**
-
-${emoji} **Classificado como: ${typeLabel}**
-Confiança: ${(classification.confidence * 100).toFixed(0)}%
-
-📋 **Evidências:**
-${classification.evidence.map(e => `• ${e}`).join('\n')}
-
-${classification.type === 'evolutiva' ? `
-⚠️ **PRÓXIMO PASSO**:
-Como se trata de uma evolutiva, é necessário:
-1. Validar com Product Owner
-2. Estimar esforço
-3. Criar item no backlog
-` : `
-🔧 **PRÓXIMO PASSO**:
-Como se trata de um defeito, prosseguir para análise N3 (sugestão de correção).
-`}
-
----
-_Esta é uma nota automática gerada pelo sistema de análise de tickets._`;
+    return `🤖 **ANÁLISE AUTOMÁTICA - N2 (Classificação)**\n\n${emoji} **Classificado como: ${typeLabel}**\nConfiança: ${(classification.confidence * 100).toFixed(0)}%\n\n📋 **Evidências:**\n${classification.evidence.map(e => `• ${e}`).join('\n')}\n\n${classification.type === 'evolutiva' ? `\n⚠️ **PRÓXIMO PASSO**:\nComo se trata de uma evolutiva, é necessário:\n1. Validar com Product Owner\n2. Estimar esforço\n3. Criar item no backlog\n` : `\n🔧 **PRÓXIMO PASSO**:\nComo se trata de um defeito, prosseguir para análise N3 (sugestão de correção).\n`}\n\n---\n_Esta é uma nota automática gerada pelo sistema de análise de tickets._`;
   }
 
   /**
@@ -207,21 +176,7 @@ _Esta é uma nota automática gerada pelo sistema de análise de tickets._`;
     steps: string[];
     priority: string;
   }): string {
-    return `🤖 **ANÁLISE AUTOMÁTICA - N3 (Sugestão de Correção)**
-
-🔍 **Causa Provável:**
-${suggestion.possibleCause}
-
-🛠️ **Passos Sugeridos:**
-${suggestion.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}
-
-⚡ **Prioridade Sugerida:** ${suggestion.priority}
-
-⚠️ **IMPORTANTE**:
-Esta é uma sugestão automática. O analista deve validar e adaptar conforme necessário.
-
----
-_Esta é uma nota automática gerada pelo sistema de análise de tickets._`;
+    return `🤖 **ANÁLISE AUTOMÁTICA - N3 (Sugestão de Correção)**\n\n🔍 **Causa Provável:**\n${suggestion.possibleCause}\n\n🛠️ **Passos Sugeridos:**\n${suggestion.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}\n\n⚡ **Prioridade Sugerida:** ${suggestion.priority}\n\n⚠️ **IMPORTANTE**:\nEsta é uma sugestão automática. O analista deve validar e adaptar conforme necessário.\n\n---\n_Esta é uma nota automática gerada pelo sistema de análise de tickets._`;
   }
 }
 
