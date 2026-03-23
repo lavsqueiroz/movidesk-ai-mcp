@@ -158,6 +158,51 @@ export class MCPHTTPServer {
       }
     });
 
+    // ═══════════════════════════════════════════════════════
+    // MOVIDESK - TESTE: Criar Nota Interna
+    // ═══════════════════════════════════════════════════════
+    this.app.post('/movidesk/tickets/:id/note', async (req: Request, res: Response) => {
+      try {
+        const ticketId = req.params.id;
+        const { description } = req.body;
+
+        if (!description) {
+          return res.status(400).json({
+            status: 'error',
+            message: 'Campo "description" é obrigatório',
+          });
+        }
+
+        console.log(`\n📝 Criando nota no ticket ${ticketId}...`);
+
+        const success = await this.movideskClient.createInternalNote({
+          ticketId,
+          description,
+          isInternal: true,
+        });
+
+        if (success) {
+          res.json({
+            status: 'success',
+            message: 'Nota criada com sucesso',
+            ticket_id: ticketId,
+          });
+        } else {
+          res.status(500).json({
+            status: 'error',
+            message: 'Falha ao criar nota',
+          });
+        }
+        
+      } catch (error: any) {
+        console.error('❌ Erro ao criar nota:', error);
+        res.status(500).json({
+          status: 'error',
+          message: error.message,
+        });
+      }
+    });
+
     // Webhook do Movidesk - ADICIONA NA FILA
     this.app.post('/webhook/ticket-created', async (req: Request, res: Response) => {
       try {
@@ -258,12 +303,13 @@ export class MCPHTTPServer {
         console.log(`  📦 Fila: ${stats.pending} pendentes, ${stats.completed} processados`);
         console.log('');
         console.log('  🔓 ROTAS:');
-        console.log('     GET  /health                    - Health check');
-        console.log('     GET  /movidesk/tickets          - Listar tickets');
-        console.log('     GET  /movidesk/tickets/:id      - Buscar 1 ticket');
-        console.log('     POST /webhook/ticket-created    - Webhook (→ fila)');
-        console.log('     GET  /queue/stats               - Estatísticas fila');
-        console.log('     GET  /queue/pending             - Tickets pendentes');
+        console.log('     GET  /health                       - Health check');
+        console.log('     GET  /movidesk/tickets             - Listar tickets');
+        console.log('     GET  /movidesk/tickets/:id         - Buscar 1 ticket');
+        console.log('     POST /movidesk/tickets/:id/note    - Criar nota (TESTE)');
+        console.log('     POST /webhook/ticket-created       - Webhook (→ fila)');
+        console.log('     GET  /queue/stats                  - Estatísticas fila');
+        console.log('     GET  /queue/pending                - Tickets pendentes');
         console.log('');
         console.log('═══════════════════════════════════════════════════════════');
         console.log('');
