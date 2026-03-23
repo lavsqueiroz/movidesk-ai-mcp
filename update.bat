@@ -5,36 +5,22 @@ echo ========================================
 echo.
 
 set INSTALL_DIR=C:\Users\Administrador\movidesk-ai-mcp-main\movidesk-ai-mcp-main
-set ZIP_URL=https://github.com/lavsqueiroz/movidesk-ai-mcp/archive/refs/heads/main.zip
-set ZIP_FILE=%TEMP%\movidesk-mcp-update.zip
-set EXTRACT_DIR=%TEMP%\movidesk-mcp-update
+set BASE_URL=https://raw.githubusercontent.com/lavsqueiroz/movidesk-ai-mcp/main
 
-echo [1/5] Baixando atualizacao do GitHub...
-curl -L -o "%ZIP_FILE%" "%ZIP_URL%"
-if errorlevel 1 (
-    echo ERRO: Falha ao baixar o ZIP.
-    pause
-    exit /b 1
-)
+echo [1/4] Baixando arquivos atualizados do GitHub...
 
-echo [2/5] Extraindo arquivos via PowerShell...
-if exist "%EXTRACT_DIR%" rmdir /s /q "%EXTRACT_DIR%"
-mkdir "%EXTRACT_DIR%"
-powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-  "try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $zip = [System.IO.Compression.ZipFile]::OpenRead('%ZIP_FILE%'); foreach ($entry in $zip.Entries) { $dest = Join-Path '%EXTRACT_DIR%' $entry.FullName; $destDir = Split-Path $dest; if (!(Test-Path $destDir)) { New-Item -ItemType Directory -Force -Path $destDir | Out-Null }; if ($entry.Name -ne '') { try { [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $dest, $true) } catch { Write-Host 'Ignorando arquivo invalido:' $entry.FullName } } }; $zip.Dispose() } catch { Write-Host 'Erro:' $_.Exception.Message; exit 1 }"
-if errorlevel 1 (
-    echo ERRO: Falha ao extrair o ZIP.
-    pause
-    exit /b 1
-)
+curl -L -f -o "%INSTALL_DIR%\src\mcp-server\mcp-queue-server.ts" "%BASE_URL%/src/mcp-server/mcp-queue-server.ts"
+curl -L -f -o "%INSTALL_DIR%\src\services\MovideskClient.ts" "%BASE_URL%/src/services/MovideskClient.ts"
+curl -L -f -o "%INSTALL_DIR%\src\services\ClaudeClient.ts" "%BASE_URL%/src/services/ClaudeClient.ts"
+curl -L -f -o "%INSTALL_DIR%\src\services\TicketProcessor.ts" "%BASE_URL%/src/services/TicketProcessor.ts"
+curl -L -f -o "%INSTALL_DIR%\package.json" "%BASE_URL%/package.json"
+curl -L -f -o "%INSTALL_DIR%\tsconfig.json" "%BASE_URL%/tsconfig.json"
 
-echo [3/5] Copiando arquivos atualizados...
-xcopy /s /y "%EXTRACT_DIR%\movidesk-ai-mcp-main\src" "%INSTALL_DIR%\src\"
-xcopy /s /y "%EXTRACT_DIR%\movidesk-ai-mcp-main\prompts" "%INSTALL_DIR%\prompts\"
-copy /y "%EXTRACT_DIR%\movidesk-ai-mcp-main\package.json" "%INSTALL_DIR%\package.json"
-copy /y "%EXTRACT_DIR%\movidesk-ai-mcp-main\tsconfig.json" "%INSTALL_DIR%\tsconfig.json"
+echo [2/4] Baixando prompts...
+if not exist "%INSTALL_DIR%\prompts" mkdir "%INSTALL_DIR%\prompts"
+curl -L -f -o "%INSTALL_DIR%\prompts\N1_SUPPORT_AGENT.md" "%BASE_URL%/prompts/N1_SUPPORT_AGENT.md"
 
-echo [4/5] Fazendo build...
+echo [3/4] Fazendo build...
 cd /d "%INSTALL_DIR%"
 call npm run build
 if errorlevel 1 (
@@ -43,14 +29,18 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [5/5] Reiniciando Claude Desktop...
+echo [4/4] Reiniciando Claude Desktop...
 taskkill /f /im Claude.exe >nul 2>&1
-timeout /t 2 >nul
+timeout /t 3 >nul
 start "" "%LOCALAPPDATA%\Microsoft\WindowsApps\Claude.exe"
+if errorlevel 1 (
+    echo AVISO: Nao foi possivel reiniciar o Claude automaticamente.
+    echo Por favor, abra o Claude Desktop manualmente.
+)
 
 echo.
 echo ========================================
 echo  Atualizacao concluida com sucesso!
-echo  Claude Desktop foi reiniciado.
+echo  Abra o Claude Desktop se nao abriu.
 echo ========================================
 pause
