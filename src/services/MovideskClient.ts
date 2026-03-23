@@ -108,8 +108,6 @@ export class MovideskClient {
       const { limit = 10, justificativas } = params;
       console.error(`📋 Buscando tickets Aguardando com justificativas N1...`);
 
-      // Busca todos os Aguardando e filtra por justificativa localmente
-      // pois a API do Movidesk pode não suportar filtro por campo customizado diretamente
       const response = await this.httpClient.get('/tickets', {
         params: {
           token: this.token,
@@ -158,7 +156,7 @@ export class MovideskClient {
         id: 0,
         type: 2, // 2 = Nota interna
         description: params.description,
-        isInternal: true, // SEMPRE interna
+        isInternal: true,
       };
 
       await this.httpClient.patch(
@@ -177,6 +175,13 @@ export class MovideskClient {
       }
       return false;
     }
+  }
+
+  /**
+   * Formata nota N1 para campos faltantes
+   */
+  formatN1Note(missingFields: string[]): string {
+    return `🤖 **ANÁLISE AUTOMÁTICA - N1 (Validação)**\n\n❌ **TICKET INCOMPLETO**\n\nFaltam as seguintes informações obrigatórias:\n${missingFields.map(f => `• ${f}`).join('\n')}\n\n⚠️ **AÇÃO NECESSÁRIA**:\nPor favor, solicite ao solicitante que forneça as informações acima antes de prosseguir com a análise.\n\n---\n_Esta é uma nota automática gerada pelo sistema de análise de tickets._`;
   }
 }
 
