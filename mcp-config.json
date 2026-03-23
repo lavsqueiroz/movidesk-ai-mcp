@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "movidesk-queue": {
+      "command": "node",
+      "args": [
+        "C:\\\\Users\\\\Administrador\\\\movidesk-ai-mcp\\\\dist\\\\mcp-server\\\\mcp-queue-server.js"
+      ],
+      "env": {
+        "NODE_ENV": "production"
+      }
+    }
+  }
+}
