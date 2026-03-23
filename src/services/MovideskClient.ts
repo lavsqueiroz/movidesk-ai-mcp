@@ -44,8 +44,9 @@ export class MovideskClient {
       throw new Error('MOVIDESK_TOKEN não configurado no .env');
     }
 
+    // URL correta: https://api.movidesk.com/public/v1
     this.httpClient = axios.create({
-      baseURL: this.baseUrl,
+      baseURL: 'https://api.movidesk.com/public/v1',
       timeout: 30000,
       headers: {
         'Content-Type': 'application/json',
@@ -55,6 +56,7 @@ export class MovideskClient {
 
   /**
    * Lista tickets do Movidesk
+   * IMPORTANTE: $select é OBRIGATÓRIO na API do Movidesk!
    */
   async listTickets(params: ListTicketsParams = {}): Promise<MovideskTicket[]> {
     try {
@@ -62,11 +64,12 @@ export class MovideskClient {
 
       console.log(`📋 Buscando ${limit} tickets do Movidesk...`);
 
-      const response = await this.httpClient.get('/api/v1/tickets', {
+      // $select é OBRIGATÓRIO
+      const response = await this.httpClient.get('/tickets', {
         params: {
           token: this.token,
-          $top: limit,
           $select: 'id,protocol,subject,status,createdDate',
+          $top: limit,
           ...(status && { $filter: `status eq '${status}'` }),
         },
       });
@@ -77,6 +80,10 @@ export class MovideskClient {
       return tickets;
     } catch (error: any) {
       console.error('❌ Erro ao listar tickets:', error.message);
+      if (error.response) {
+        console.error('   Status:', error.response.status);
+        console.error('   Data:', error.response.data);
+      }
       throw error;
     }
   }
@@ -86,7 +93,7 @@ export class MovideskClient {
    */
   async getTicket(ticketId: string): Promise<MovideskTicket | null> {
     try {
-      const response = await this.httpClient.get(`/api/v1/tickets`, {
+      const response = await this.httpClient.get('/tickets', {
         params: {
           token: this.token,
           id: ticketId,
@@ -118,7 +125,7 @@ export class MovideskClient {
       };
 
       await this.httpClient.post(
-        `/api/v1/tickets/${params.ticketId}/actions`,
+        `/tickets/${params.ticketId}/actions`,
         noteData,
         {
           params: { token: this.token },
