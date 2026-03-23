@@ -1,12 +1,13 @@
 {
   "name": "movidesk-ai-mcp",
-  "version": "1.0.0",
-  "description": "MCP Server para análise automática de tickets do Movidesk usando IA",
+  "version": "2.0.0",
+  "description": "MCP Server para análise automática de tickets do Movidesk usando IA - Sistema com Aprovação Humana",
   "type": "module",
   "main": "dist/mcp-server/server-http-entry.js",
   "scripts": {
     "dev": "tsx watch src/mcp-server/server-http-entry.ts",
-    "build": "rm -rf dist && npm rebuild better-sqlite3 && tsc",
+    "build": "tsc",
+    "build:clean": "rimraf dist && tsc",
     "start": "node dist/mcp-server/server-http-entry.js",
     "typecheck": "tsc --noEmit"
   },
@@ -22,7 +23,8 @@
     "@types/express": "^4.17.21",
     "@types/better-sqlite3": "^7.6.0",
     "typescript": "^5.3.3",
-    "tsx": "^4.7.0"
+    "tsx": "^4.7.0",
+    "rimraf": "^5.0.0"
   },
   "engines": {
     "node": ">=18.0.0"
