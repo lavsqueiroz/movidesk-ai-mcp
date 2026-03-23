@@ -2,7 +2,7 @@
  * Movidesk API Client
  * 
  * Cliente para integração com API do Movidesk
- * Permite criar notas internas nos tickets
+ * Permite criar notas internas e listar tickets
  */
 
 import axios, { AxiosInstance } from 'axios';
@@ -26,6 +26,11 @@ interface CreateNoteParams {
   isInternal: boolean;
 }
 
+interface ListTicketsParams {
+  limit?: number;
+  status?: string;
+}
+
 export class MovideskClient {
   private httpClient: AxiosInstance;
   private token: string;
@@ -46,6 +51,34 @@ export class MovideskClient {
         'Content-Type': 'application/json',
       },
     });
+  }
+
+  /**
+   * Lista tickets do Movidesk
+   */
+  async listTickets(params: ListTicketsParams = {}): Promise<MovideskTicket[]> {
+    try {
+      const { limit = 10, status } = params;
+
+      console.log(`📋 Buscando ${limit} tickets do Movidesk...`);
+
+      const response = await this.httpClient.get('/api/v1/tickets', {
+        params: {
+          token: this.token,
+          $top: limit,
+          $select: 'id,protocol,subject,status,createdDate',
+          ...(status && { $filter: `status eq '${status}'` }),
+        },
+      });
+
+      const tickets = Array.isArray(response.data) ? response.data : [response.data];
+      console.log(`✅ ${tickets.length} tickets retornados`);
+
+      return tickets;
+    } catch (error: any) {
+      console.error('❌ Erro ao listar tickets:', error.message);
+      throw error;
+    }
   }
 
   /**
